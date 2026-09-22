@@ -11,11 +11,11 @@ export default function Home() {
   const [retry, setRetry] = useState(0);
   const generation = useRef(0);
   const activeRequest = useRef<AbortController | null>(null);
-  const resetResult = () => {
+  const resetResult = (clear = false) => {
     generation.current += 1;
     activeRequest.current?.abort();
     setPending(false);
-    setResult(null);
+    if (clear) setResult(null);
     setError("");
   };
 
@@ -131,7 +131,7 @@ export default function Home() {
                 value={text}
                 onChange={(e) => {
                   setText(e.target.value);
-                  resetResult();
+                  resetResult(e.target.value.length === 0);
                 }}
                 placeholder="例：スマホのようにアップデートで機能が増える車に惹かれます。すっきりした内装が好きで、家で充電して朝そのまま出発できる暮らしに憧れます。"
                 minLength={10}
@@ -160,8 +160,8 @@ export default function Home() {
               )}
               <div className="actions">
                 <button type="submit" disabled={pending || composing || text.trim().length < 10}>
-                  {pending ? "判定しています…" : "再判定する"}
-                  <span aria-hidden="true">{pending ? "…" : "→"}</span>
+                  再判定する
+                  <span aria-hidden="true">→</span>
                 </button>
                 <button
                   className="clear"
@@ -169,7 +169,7 @@ export default function Home() {
                   disabled={!text}
                   onClick={() => {
                     setText("");
-                    resetResult();
+                    resetResult(true);
                   }}
                 >
                   入力をクリア
@@ -187,6 +187,10 @@ export default function Home() {
               <h2 id="result-title">チェック結果</h2>
             </div>
             <div aria-live="polite">
+              {text.length > 0 && <>
+                <p className="result-label">あなたの「テスラ共感度」</p>
+                <div className="score">{result?.score ?? "—"}<span> / 100</span></div>
+              </>}
               {result ? (
                 result.insufficient ? (
                   <div className="empty">
@@ -199,11 +203,6 @@ export default function Home() {
                   </div>
                 ) : (
                   <>
-                    <p className="result-label">あなたの「テスラ共感度」</p>
-                    <div className="score">
-                      {result.score}
-                      <span> / 100</span>
-                    </div>
                     <p className="result-summary">
                       {(result.score ?? 0) >= 75
                         ? "テスラの魅力に強く共感する好みです"
@@ -251,33 +250,18 @@ export default function Home() {
                     <span className="model">判定モデル：{result.model}</span>
                   </>
                 )
+              ) : text.length > 0 ? (
+                <p className="result-note">点数は入力内容に合わせて自動で更新されます。</p>
               ) : (
                 <div className="empty">
-                  <div
-                    className={`document-icon ${pending ? "loading" : ""}`}
-                    aria-hidden="true"
-                  >
+                  <div className="document-icon" aria-hidden="true">
                     <span />
                     <span />
                     <span />
                     <b>✓</b>
                   </div>
-                  <h3>
-                    {pending
-                      ? "好みとテスラの魅力を照らし合わせています"
-                      : "結果はこちらに表示されます"}
-                  </h3>
-                  <p>
-                    {pending ? (
-                      "そのまま少しお待ちください。"
-                    ) : (
-                      <>
-                        好きなものや車に求めることを入力し、
-                        <br />
-                        10文字以上になると自動で判定します。
-                      </>
-                    )}
-                  </p>
+                  <h3>結果はこちらに表示されます</h3>
+                  <p>好きなものや車に求めることを入力すると、<br />点数がここに表示されます。</p>
                   <div className="empty-metrics">
                     <span>テクノロジー</span>
                     <span>デザイン</span>
