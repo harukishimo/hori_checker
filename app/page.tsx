@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef, type FormEvent } from "react";
+import { useState, useRef, useEffect, type FormEvent } from "react";
 import type { CheckResult } from "@/lib/checker";
 
 export default function Home() {
@@ -7,40 +7,58 @@ export default function Home() {
   const [result, setResult] = useState<CheckResult | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
-  const resultRef = useRef<HTMLElement>(null);
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (pending) return;
-    setPending(true);
-    setError("");
-    setResult(null);
-    try {
-      const response = await fetch("/api/check", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
-        signal: AbortSignal.timeout(25000),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "判定できませんでした。");
-      setResult(data);
-      requestAnimationFrame(() => resultRef.current?.focus());
-    } catch (e) {
-      setError(
-        e instanceof Error && e.name === "TimeoutError"
-          ? "通信がタイムアウトしました。再度お試しください。"
-          : e instanceof Error
-            ? e.message
-            : "通信に失敗しました。",
-      );
-    } finally {
-      setPending(false);
-    }
-  }
+  const [composing, setComposing] = useState(false);
+  const [retry, setRetry] = useState(0);
+  const generation = useRef(0);
+  const activeRequest = useRef<AbortController | null>(null);
   const resetResult = () => {
+    generation.current += 1;
+    activeRequest.current?.abort();
+    setPending(false);
     setResult(null);
     setError("");
   };
+
+  useEffect(() => {
+    const input = text.trim();
+    if (composing || input.length < 10 || input.length > 3000) return;
+    const controller = new AbortController();
+    activeRequest.current = controller;
+    const id = ++generation.current;
+    const isCurrent = () => !controller.signal.aborted && id === generation.current;
+    const timer = setTimeout(async () => {
+      setPending(true);
+      try {
+        const response = await fetch("/api/check", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: input }),
+          signal: AbortSignal.any([controller.signal, AbortSignal.timeout(25000)]),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "判定できませんでした。");
+        if (isCurrent()) setResult(data);
+      } catch (e) {
+        if (isCurrent()) setError(
+          e instanceof Error && e.name === "TimeoutError"
+            ? "通信がタイムアウトしました。再判定をお試しください。"
+            : e instanceof Error ? e.message : "通信に失敗しました。",
+        );
+      } finally {
+        if (isCurrent()) setPending(false);
+      }
+    }, 500);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [text, composing, retry]);
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    resetResult();
+    setRetry(value => value + 1);
+  }
   return (
     <>
       <a className="skip" href="#main">
@@ -105,7 +123,7 @@ export default function Home() {
                 <span className="required">必須</span>
               </label>
               <p className="hint" id="text-hint">
-                体験や購入理由、気になることを10〜3,000文字で自由に書いてください。
+                10〜3,000文字で入力すると自動で判定します。入力が止まって約0.5秒後に結果を更新します。
               </p>
               <textarea
                 id="text"
@@ -119,13 +137,21 @@ export default function Home() {
                 minLength={10}
                 maxLength={3000}
                 required
-                disabled={pending}
+                onCompositionStart={() => {
+                  resetResult();
+                  setComposing(true);
+                }}
+                onCompositionEnd={(event) => {
+                  resetResult();
+                  setText(event.currentTarget.value);
+                  setComposing(false);
+                }}
               />
               <p className="counter" id="text-count">
                 {text.length.toLocaleString()} / 3,000文字
               </p>
               <p className="privacy">
-                判定時に、入力した文章をTypeSafe AIへ送信します。
+                入力中の文章は、自動判定のためTypeSafe AIへ送信されます。日本語の変換中は送信しません。
               </p>
               {error && (
                 <div className="error" role="alert">
@@ -133,14 +159,14 @@ export default function Home() {
                 </div>
               )}
               <div className="actions">
-                <button type="submit" disabled={pending}>
-                  {pending ? "判定しています…" : "テスラとの相性をチェック"}
+                <button type="submit" disabled={pending || composing || text.trim().length < 10}>
+                  {pending ? "判定しています…" : "再判定する"}
                   <span aria-hidden="true">{pending ? "…" : "→"}</span>
                 </button>
                 <button
                   className="clear"
                   type="button"
-                  disabled={pending || !text}
+                  disabled={!text}
                   onClick={() => {
                     setText("");
                     resetResult();
@@ -153,8 +179,6 @@ export default function Home() {
           </section>
           <section
             className="result-panel"
-            ref={resultRef}
-            tabIndex={-1}
             aria-labelledby="result-title"
             aria-busy={pending}
           >
@@ -250,7 +274,7 @@ export default function Home() {
                       <>
                         好きなものや車に求めることを入力し、
                         <br />
-                        チェックボタンを押してください。
+                        10文字以上になると自動で判定します。
                       </>
                     )}
                   </p>

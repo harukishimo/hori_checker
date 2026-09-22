@@ -54,3 +54,7 @@ npm run build
 - https://www.tesla.com/ja_jp/charging
 - https://www.tesla.com/ja_jp/support/software-updates
 - https://design.digital.go.jp/dads/
+
+## リアルタイム判定
+
+10文字以上の入力が500ms止まると自動でAPIを呼びます。日本語IMEの変換中は送信を待ち、新しい入力・クリアで進行中のリクエストを中止します。古い応答は破棄し、入力欄のフォーカスを移動しません。ブラウザー側の中止は、既に開始されたAI処理や課金の取り消しを保証しません。
